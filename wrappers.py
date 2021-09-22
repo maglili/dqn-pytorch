@@ -7,15 +7,19 @@ import numpy as np
 import gym
 import copy
 import cv2
+
 cv2.ocl.setUseOpenCL(False)
 
-def make_env(env, stack_frames=True, episodic_life=True, clip_rewards=False, scale=False):
+
+def make_env(
+    env, stack_frames=True, episodic_life=True, clip_rewards=False, scale=False
+):
     if episodic_life:
         env = EpisodicLifeEnv(env)
 
     env = NoopResetEnv(env, noop_max=30)
     env = MaxAndSkipEnv(env, skip=4)
-    if 'FIRE' in env.unwrapped.get_action_meanings():
+    if "FIRE" in env.unwrapped.get_action_meanings():
         env = FireResetEnv(env)
 
     env = WarpFrame(env)
@@ -25,8 +29,8 @@ def make_env(env, stack_frames=True, episodic_life=True, clip_rewards=False, sca
         env = ClipRewardEnv(env)
     return env
 
-class RewardScaler(gym.RewardWrapper):
 
+class RewardScaler(gym.RewardWrapper):
     def reward(self, reward):
         return reward * 0.1
 
@@ -68,6 +72,7 @@ class LazyFrames(object):
     def __getitem__(self, i):
         return self._force()[i]
 
+
 class FrameStack(gym.Wrapper):
     def __init__(self, env, k):
         """Stack k last frames.
@@ -80,7 +85,12 @@ class FrameStack(gym.Wrapper):
         self.k = k
         self.frames = deque([], maxlen=k)
         shp = env.observation_space.shape
-        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(shp[0], shp[1], shp[2] * k), dtype=env.observation_space.dtype)
+        self.observation_space = gym.spaces.Box(
+            low=0,
+            high=255,
+            shape=(shp[0], shp[1], shp[2] * k),
+            dtype=env.observation_space.dtype,
+        )
 
     def reset(self):
         ob = self.env.reset()
@@ -104,12 +114,15 @@ class WarpFrame(gym.ObservationWrapper):
         gym.ObservationWrapper.__init__(self, env)
         self.width = 84
         self.height = 84
-        self.observation_space = gym.spaces.Box(low=0, high=255,
-            shape=(self.height, self.width, 1), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(
+            low=0, high=255, shape=(self.height, self.width, 1), dtype=np.uint8
+        )
 
     def observation(self, frame):
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-        frame = cv2.resize(frame, (self.width, self.height), interpolation=cv2.INTER_AREA)
+        frame = cv2.resize(
+            frame, (self.width, self.height), interpolation=cv2.INTER_AREA
+        )
         return frame[:, :, None]
 
 
@@ -117,7 +130,7 @@ class FireResetEnv(gym.Wrapper):
     def __init__(self, env=None):
         """For environments where the user need to press FIRE for the game to start."""
         super(FireResetEnv, self).__init__(env)
-        assert env.unwrapped.get_action_meanings()[1] == 'FIRE'
+        assert env.unwrapped.get_action_meanings()[1] == "FIRE"
         assert len(env.unwrapped.get_action_meanings()) >= 3
 
     def step(self, action):
@@ -203,6 +216,7 @@ class MaxAndSkipEnv(gym.Wrapper):
         self._obs_buffer.append(obs)
         return obs
 
+
 class NoopResetEnv(gym.Wrapper):
     def __init__(self, env=None, noop_max=30):
         """Sample initial states by taking random number of no-ops on reset.
@@ -211,13 +225,13 @@ class NoopResetEnv(gym.Wrapper):
         super(NoopResetEnv, self).__init__(env)
         self.noop_max = noop_max
         self.override_num_noops = None
-        assert env.unwrapped.get_action_meanings()[0] == 'NOOP'
+        assert env.unwrapped.get_action_meanings()[0] == "NOOP"
 
     def step(self, action):
         return self.env.step(action)
 
     def reset(self):
-        """ Do no-op action for a number of steps in [1, noop_max]."""
+        """Do no-op action for a number of steps in [1, noop_max]."""
         self.env.reset()
         if self.override_num_noops is not None:
             noops = self.override_num_noops
