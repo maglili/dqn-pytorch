@@ -74,6 +74,18 @@ def optimize_model():
     )
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
 
+    # # for check
+    # print("non_final_mask:", non_final_mask.shape)
+    # print()
+    # print("state_batch:", state_batch.shape)
+    # print("action_batch:", action_batch.shape)
+    # print("reward_batch:", reward_batch.shape)
+    # print("non_final_next_states:", non_final_next_states.shape)
+    # print()
+    # print("state_action_values:", state_action_values.shape)
+    # print("expected_state_action_values:", expected_state_action_values.shape)
+    # quit()
+
     loss = F.smooth_l1_loss(
         state_action_values, expected_state_action_values.unsqueeze(1)
     )
@@ -125,6 +137,7 @@ def train(env, n_episodes, render=False):
 
             if done:
                 break
+
         if episode % 20 == 0:
             print(
                 "Total steps: {} \t Episode: {}/{} \t Total reward: {}".format(
