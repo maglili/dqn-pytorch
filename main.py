@@ -1,27 +1,60 @@
-import copy
+import argparse
 from collections import namedtuple
-from itertools import count
 import math
 import random
+import os
 import numpy as np
-import time
-
 import gym
-
-from wrappers import *
-from memory import ReplayMemory
-from models import *
-
+import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.transforms as T
+import ale_py
+
+# custome modules
+from wrappers import *
+from memory import ReplayMemory
+from models import *
+
+
+# argparser
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "-bs",
+    "--batch_size",
+    nargs="?",
+    type=int,
+    default=32,
+    help="Number of batch size.",
+)
+parser.add_argument(
+    "-epi",
+    "--n_episodes",
+    nargs="?",
+    type=int,
+    default=500,
+    help="Number of training episodes.",
+)
+parser.add_argument(
+    "-lr",
+    "--learning_rate",
+    nargs="?",
+    type=float,
+    default=1e-4,
+    help="learning rate",
+)
+args = parser.parse_args()
+
 
 Transition = namedtuple("Transion", ("state", "action", "next_state", "reward"))
 
 
 def select_action(state):
+    """
+    epsilon-greedy policy
+    """
     global steps_done
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(
@@ -55,7 +88,7 @@ def optimize_model():
     non_final_mask = torch.tensor(
         tuple(map(lambda s: s is not None, batch.next_state)),
         device=device,
-        dtype=torch.uint8,
+        dtype=torch.bool,
     )
 
     non_final_next_states = torch.cat(
@@ -109,14 +142,12 @@ def train(env, n_episodes, render=False):
         obs = env.reset()
         state = get_state(obs)
         total_reward = 0.0
-        for t in count():
+        while True:
             action = select_action(state)
-
             if render:
                 env.render()
 
             obs, reward, done, info = env.step(action)
-
             total_reward += reward
 
             if not done:
@@ -125,7 +156,6 @@ def train(env, n_episodes, render=False):
                 next_state = None
 
             reward = torch.tensor([reward], device=device)
-
             memory.push(state, action.to("cpu"), next_state, reward.to("cpu"))
             state = next_state
 
@@ -141,20 +171,26 @@ def train(env, n_episodes, render=False):
         if episode % 20 == 0:
             print(
                 "Total steps: {} \t Episode: {}/{} \t Total reward: {}".format(
-                    steps_done, episode, t, total_reward
+                    steps_done, episode, n_episodes, total_reward
                 )
             )
     env.close()
-    return
+    model_folder = check_path("model")
+    save_folder = os.path.join(model_folder, fname)
+    if not os.path.isdir(save_folder):
+        os.mkdir(save_folder)
+        print("Create path:", save_folder)
+    torch.save(policy_net.state_dict(), os.path.join(save_folder, "policy_net.pt"))
 
 
 def test(env, n_episodes, policy, render=True):
-    env = gym.wrappers.Monitor(env, "./videos/" + "dqn_pong_video")
+    save_folder = check_path("videos")
+    env = gym.wrappers.Monitor(env, os.path.join(save_folder, fname), force=True)
     for episode in range(n_episodes):
         obs = env.reset()
         state = get_state(obs)
         total_reward = 0.0
-        for t in count():
+        while True:
             action = policy(state.to(device)).max(1)[1].view(1, 1)
 
             if render:
@@ -179,44 +215,72 @@ def test(env, n_episodes, policy, render=True):
                 break
 
     env.close()
-    return
+
+
+def check_path(fname):
+    """
+    Check whether folder exist or not.
+    """
+    pwd = os.getcwd()
+    save_folder = os.path.join(pwd, fname)
+    if not os.path.isdir(save_folder):
+        os.mkdir(save_folder)
+        print("Create path:", save_folder)
+    return save_folder
 
 
 if __name__ == "__main__":
+
+    # create environment
+    # env_name = "PongNoFrameskip-v4"
+    env_name = r"PongDeterministic-v4"
+    env = gym.make(env_name)
+    env = make_env(env)
+    print("num of actions:", env.action_space.n)
+    print("action meaning:", env.unwrapped.get_action_meanings())
+    n_action = env.action_space.n
+
     # set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # hyperparameters
-    BATCH_SIZE = 32
+    BATCH_SIZE = args.batch_size
     GAMMA = 0.99
     EPS_START = 1
     EPS_END = 0.02
     EPS_DECAY = 1000000
     TARGET_UPDATE = 1000
     RENDER = False
-    lr = 1e-4
+    lr = args.learning_rate
     INITIAL_MEMORY = 10000
     MEMORY_SIZE = 10 * INITIAL_MEMORY
+    n_episodes = args.n_episodes
+
+    # folder name
+    fname = env_name + "_epo" + str(n_episodes)
 
     # create networks
-    policy_net = DQN(n_actions=4).to(device)
-    target_net = DQN(n_actions=4).to(device)
+    policy_net = DQNbn(n_actions=n_action).to(device)
+    target_net = DQNbn(n_actions=n_action).to(device)
     target_net.load_state_dict(policy_net.state_dict())
 
     # setup optimizer
     optimizer = optim.Adam(policy_net.parameters(), lr=lr)
 
+    # setup step counter
     steps_done = 0
-
-    # create environment
-    env = gym.make("PongNoFrameskip-v4")
-    env = make_env(env)
 
     # initialize replay memory
     memory = ReplayMemory(MEMORY_SIZE)
 
     # train model
-    train(env, 400)
-    torch.save(policy_net, "dqn_pong_model")
-    policy_net = torch.load("dqn_pong_model")
+    train(env, n_episodes)
+
+    # load model
+    model_path = os.path.join("model", fname, "policy_net.pt")
+    policy_net = DQNbn(n_actions=n_action).to(device)
+    policy_net.load_state_dict(torch.load(model_path))
+    print("load model:", model_path)
+
+    # test model
     test(env, 1, policy_net, render=False)
