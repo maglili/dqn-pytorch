@@ -1,10 +1,23 @@
 # DQN PyTorch
 
+## Intro
+
 This repo is fork from [jmichaux/dqn-pytorch](https://github.com/jmichaux/dqn-pytorch).
 
 **8000 episode result:**
 
 ![Demo result](./PongNoFrameskip-v4_epo8000_bs32_lr0.0001.gif)
+
+## Requirements
+
+- gym (with atari)
+- pytorch
+
+**If you use conda:**
+
+```bash
+conda create --name <env> --file requirements.txt
+```
 
 ## Run
 
