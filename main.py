@@ -22,12 +22,29 @@ from models import *
 # argparser
 parser = argparse.ArgumentParser()
 parser.add_argument(
+    "-m",
+    "--mode",
+    nargs="?",
+    type=str,
+    choices=["train", "test"],
+    default="train",
+    help="train model or test model.",
+)
+parser.add_argument(
+    "-env",
+    "--env_name",
+    nargs="?",
+    type=str,
+    default="PongDeterministic-v4",
+    help="Environment name",
+)
+parser.add_argument(
     "-bs",
     "--batch_size",
     nargs="?",
     type=int,
     default=32,
-    help="Number of batch size.",
+    help="Mini batch size.",
 )
 parser.add_argument(
     "-epi",
@@ -81,6 +98,10 @@ def optimize_model():
     batch.action - tuple of all the actions (each action is an int)    
     """
     batch = Transition(*zip(*transitions))
+
+    # print("len(transitions):", len(transitions))
+    # print(batch)
+    # quit()
 
     actions = tuple((map(lambda a: torch.tensor([[a]], device=device), batch.action)))
     rewards = tuple((map(lambda r: torch.tensor([r], device=device), batch.reward)))
@@ -230,10 +251,11 @@ def check_path(fname):
 
 
 if __name__ == "__main__":
+    # PongDeterministic-v4
+    # PongNoFrameskip-v4
 
     # create environment
-    # env_name = "PongNoFrameskip-v4"
-    env_name = r"PongDeterministic-v4"
+    env_name = args.env_name
     env = gym.make(env_name)
     env = make_env(env)
     print("num of actions:", env.action_space.n)
@@ -257,30 +279,34 @@ if __name__ == "__main__":
     n_episodes = args.n_episodes
 
     # folder name
-    fname = env_name + "_epo" + str(n_episodes)
+    fname = (
+        env_name + "_epo" + str(n_episodes) + "_bs" + str(BATCH_SIZE) + "_lr" + str(lr)
+    )
 
-    # create networks
-    policy_net = DQNbn(n_actions=n_action).to(device)
-    target_net = DQNbn(n_actions=n_action).to(device)
-    target_net.load_state_dict(policy_net.state_dict())
+    if args.mode == "train":
+        # create networks
+        policy_net = DQNbn(n_actions=n_action).to(device)
+        target_net = DQNbn(n_actions=n_action).to(device)
+        target_net.load_state_dict(policy_net.state_dict())
 
-    # setup optimizer
-    optimizer = optim.Adam(policy_net.parameters(), lr=lr)
+        # setup optimizer
+        optimizer = optim.Adam(policy_net.parameters(), lr=lr)
 
-    # setup step counter
-    steps_done = 0
+        # setup step counter
+        steps_done = 0
 
-    # initialize replay memory
-    memory = ReplayMemory(MEMORY_SIZE)
+        # initialize replay memory
+        memory = ReplayMemory(MEMORY_SIZE)
 
-    # train model
-    train(env, n_episodes)
+        # train model
+        train(env, n_episodes)
 
-    # load model
-    model_path = os.path.join("model", fname, "policy_net.pt")
-    policy_net = DQNbn(n_actions=n_action).to(device)
-    policy_net.load_state_dict(torch.load(model_path))
-    print("load model:", model_path)
+    else:
+        # load model
+        model_path = os.path.join("model", fname, "policy_net.pt")
+        policy_net = DQNbn(n_actions=n_action).to(device)
+        policy_net.load_state_dict(torch.load(model_path))
+        print("load model:", model_path)
 
-    # test model
-    test(env, 1, policy_net, render=False)
+        # test model
+        test(env, 1, policy_net, render=False)
